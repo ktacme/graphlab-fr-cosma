@@ -5,12 +5,14 @@
  */
 
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import CSL from 'citeproc';
 import * as Citr from '@zettlr/citr';
 
 /**
  * @typedef BibliographicRecord
  * @type {object}
+ * @property {string} id
  * @property {object} quotesExtract
  * @property {Citation[]} quotesExtract.citationItems
  * @property {object} quotesExtract.properties
@@ -47,6 +49,8 @@ class Bibliography {
       } catch (error) {
         citationItems = [];
       }
+
+      // Les éléments sont répétés…
 
       quotes.push({
         quotesExtract: {

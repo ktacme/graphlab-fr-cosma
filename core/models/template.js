@@ -7,6 +7,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import Graph from './graph.js';
+import Record from './record.js';
 import Config from './config.js';
 import Link from './link.js';
 import Bibliography from './bibliography.js';
@@ -17,6 +18,8 @@ import app from '../../package.json';
 import { isAnImagePath, slugify } from '../utils/misc.js';
 import langPck from './lang.js';
 import { fileURLToPath } from 'url';
+import GraphEngine from 'graphology';
+import { extent } from 'd3';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -98,7 +101,8 @@ class Template {
 
   /**
    * Get data from graph and make a web app
-   * @param {Graph} graph - Graph class
+   * @param {Record[]} records
+   * @param {GraphEngine} graph
    * @param {string[]} params
    * @exemple
    * ```
@@ -107,12 +111,9 @@ class Template {
    * ```
    */
 
-  constructor(graph, params = []) {
-    if (!graph || graph instanceof Graph === false) {
-      throw new Error('Need instance of Config to process');
-    }
+  constructor(records, graph, params = [], opts = {}) {
     this.params = new Set(params.filter((param) => Template.validParams.has(param)));
-    this.config = new Config(graph.config.opts);
+    this.config = Config.get(Config.configFilePath);
 
     if (this.config.isValid() === false) {
       throw new Error('Can not template : config invalid');
@@ -138,37 +139,72 @@ class Template {
     /** @type {Bibliography} */
     let bibliography;
 
-    const filtersFromGraph = {};
-    graph.getTypesFromRecords().forEach((nodes, name) => {
-      nodes = Array.from(nodes);
-      filtersFromGraph[name] = {
-        nodes,
-        active: true,
-      };
+    /** @type {Map<string, Record>} */
+    const recordDict = new Map();
+
+    /** @type {Map<string, Set<string>>} */
+    const filtersDict = new Map();
+    /** @type {Map<string, Set<string>>} */
+    const tagsDict = new Map();
+    records.forEach((record) => {
+      recordDict.set(record.id, record);
+
+      record.types.forEach((type) => {
+        if (filtersDict.has(type)) {
+          filtersDict.get(type).add(record.id);
+        } else {
+          filtersDict.set(type, new Set([record.id]));
+        }
+      });
+
+      record.tags.forEach((type) => {
+        if (tagsDict.has(type)) {
+          tagsDict.get(type).add(record.id);
+        } else {
+          tagsDict.set(type, new Set([record.id]));
+        }
+      });
+    });
+    /** @type {[string, string[]]} */
+    const filtersDictAsArrays = Array.from(filtersDict, (arr) => {
+      arr[1] = Array.from(arr[1]);
+      return arr;
+    });
+    /** @type {[string, string[]]} */
+    const tagsDictAsArrays = Array.from(tagsDict, (arr) => {
+      arr[1] = Array.from(arr[1]);
+      return arr;
     });
 
-    /** @type {{name: string, nodes: string[]}[]} */
-    const tagsFromGraph = [];
-    graph.getTagsFromRecords().forEach((nodes, name) => {
-      nodes = Array.from(nodes);
-      tagsFromGraph.push({ name, nodes });
-    });
+    // graph.getTypesFromRecords().forEach((nodes, name) => {
+    //   nodes = Array.from(nodes);
+    //   filtersFromGraph[name] = {
+    //     nodes,
+    //     active: true,
+    //   };
+    // });
 
-    const tagsListAlphabetical = tagsFromGraph
-      .map(({ name }) => name)
+    // const tagsFromGraph = tagsDictAsArrays;
+    // graph.getTagsFromRecords().forEach((nodes, name) => {
+    //   nodes = Array.from(nodes);
+    //   tagsFromGraph.push({ name, nodes });
+    // });
+
+    const tagsListAlphabetical = tagsDictAsArrays
+      .map(([name]) => name)
       .sort((a, b) => a.localeCompare(b));
-    const tagsListIncreasing = tagsFromGraph
-      .sort((a, b) => {
-        if (a.nodes.length < b.nodes.length) return -1;
-        if (a.nodes.length > b.nodes.length) return 1;
+    const tagsListIncreasing = tagsDictAsArrays
+      .sort(([, aNodes], [, bNodes]) => {
+        if (aNodes.length < bNodes.length) return -1;
+        if (aNodes.length > bNodes.length) return 1;
         return 0;
       })
-      .map(({ name }) => name);
+      .map(([name]) => name);
 
-    const recordsListAlphabetical = graph.records
+    const recordsListAlphabetical = records
       .sort((a, b) => a.title.localeCompare(b.title))
       .map(({ title }) => title);
-    const recordsListChronological = graph.records
+    const recordsListChronological = records
       .sort((a, b) => {
         if (a.begin < b.begin) return -1;
         if (a.begin > b.begin) return 1;
@@ -179,13 +215,11 @@ class Template {
     if (this.params.has('citeproc') && this.config.canCiteproc()) {
       const { bib, cslStyle, xmlLocal } = Bibliography.getBibliographicFilesFromConfig(this.config);
       bibliography = new Bibliography(bib, cslStyle, xmlLocal);
-      for (const record of graph.records) {
+      for (const record of records) {
         record.setBibliography(bibliography);
-        record.links.forEach(({ target }) => {
-          if (bibliography.library[target.id]) {
-            references.push(bibliography.library[target.id]);
-          }
-        });
+        record.bibliographicRecords.forEach(({ ids }) =>
+          ids.forEach((id) => references.push(bibliography.library[id])),
+        );
       }
     }
 
@@ -197,7 +231,7 @@ class Template {
           path: path.join(imagesPath, recordTypes[type]['fill']),
         };
       });
-    const thumbnailsFromRecords = graph.records
+    const thumbnailsFromRecords = records
       .filter(({ thumbnail }) => typeof thumbnail === 'string')
       .map(({ thumbnail }) => {
         return {
@@ -220,7 +254,7 @@ class Template {
     templateEngine.addFilter('convertLinks', (input, opts, idToHighlight) => {
       // Replace wikilinks: "[[g:1234567890|toto]]" to "<a>toto</a>"
       input = input.replace(Link.regexWikilink, (match, _, type, targetId, __, text) => {
-        const record = graph.records.find(({ id }) => id === targetId.toLowerCase());
+        const record = records.find(({ id }) => id === targetId.toLowerCase());
 
         if (!record) return match;
 
@@ -298,7 +332,7 @@ class Template {
           // Replace "(Fowler 2003, p.2)" to "(<a>Fowler 2003</a>, p.2)"
           idsDictionnary.forEach((recordId, key) => {
             cluster = cluster.replace(key, () => {
-              const record = graph.records.find(({ id }) => id === recordId);
+              const record = records.find(({ id }) => id === recordId);
               if (!record) return key;
               return `<a href="#${record.id}" title="${escapeQuotes(
                 record.title,
@@ -324,12 +358,12 @@ class Template {
     });
     templateEngine.addFilter('imgPathToBase64', Template.imagePathToBase64);
 
-    graph.records = graph.records.map((record) => {
-      record.links = Template.markLinkContext(record.links, linkSymbol);
-      record.backlinks = Template.markLinkContext(record.backlinks, linkSymbol);
+    // records = records.map((record) => {
+    //   record.links = Template.markLinkContext(record.links, linkSymbol);
+    //   record.backlinks = Template.markLinkContext(record.backlinks, linkSymbol);
 
-      return record;
-    });
+    //   return record;
+    // });
 
     this.custom_css = null;
     if (this.params.has('css_custom') === true && this.config.canCssCustom() === true) {
@@ -342,18 +376,107 @@ class Template {
       canSaveRecords: this.config.canSaveRecords(),
 
       hideIdFromRecordHeader,
-      records: graph.records.map(({ thumbnail, ...rest }) => ({
-        ...rest,
-        thumbnail: !!thumbnail ? path.join(imagesPath, thumbnail) : undefined,
-      })),
+      records: records.map(({ thumbnail, wikilinks, bibliographicRecords, ...rest }) => {
+        const backNodes = graph.inNeighbors(rest.id);
+
+        const _links = wikilinks.map(({ contexts, type, ...rest }) => {
+          const target = recordDict.get(rest.target);
+
+          return {
+            context: contexts.join(''),
+            target: {
+              id: target.id,
+              title: target.title,
+              types: target.types,
+            },
+            type,
+          };
+        });
+
+        bibliographicRecords.forEach(({ ids, contexts }) => {
+          ids.forEach((id) => {
+            const target = recordDict.get(id);
+
+            if (!target) {
+              return;
+            }
+
+            _links.push({
+              context: contexts.join(''),
+              target: {
+                id: target.id,
+                title: target.title,
+                types: target.types,
+              },
+              type: 'undefined',
+            });
+          });
+        });
+
+        const _backlinks = backNodes.flatMap((nodeId) => {
+          const record = recordDict.get(nodeId);
+
+          return record.wikilinks
+            .filter((link) => {
+              return link.target === rest.id;
+            })
+            .map((link) => {
+              return {
+                context: link.contexts.join(''),
+                source: {
+                  id: record.id,
+                  title: record.title,
+                  types: record.types,
+                },
+                type: link.type,
+              };
+            });
+        });
+
+        backNodes.forEach((nodeId) => {
+          const record = recordDict.get(nodeId);
+
+          record.bibliographicRecords.forEach(({ ids, contexts }) => {
+            ids.forEach(() => {
+              _backlinks.push({
+                context: contexts.join(''),
+                source: {
+                  id: record.id,
+                  title: record.title,
+                  types: record.types,
+                },
+                type: 'undefined',
+              });
+            });
+          });
+        });
+
+        return {
+          ...rest,
+          backlinks: _backlinks,
+          links: _links,
+          thumbnail: !!thumbnail ? path.join(imagesPath, thumbnail) : undefined,
+        };
+      }),
 
       graph: {
         config: this.config.opts,
-        data: graph.data,
+        data: graph.export(),
         minValues: Config.minValues,
       },
 
-      timeline: graph.getTimelineFromRecords(),
+      timeline: (() => {
+        let dates = [];
+        for (const { begin, end } of records) {
+          dates.push(begin, end);
+        }
+        const [begin, end] = extent(dates);
+        return {
+          begin,
+          // Add margin of one second to display oldest node at end of timeline
+          end: end,
+        };
+      })(),
 
       translation: langPck.i,
       lang: lang,
@@ -361,8 +484,8 @@ class Template {
       customCss: this.custom_css,
 
       views: views || [],
-      filters: filtersFromGraph,
-      tags: tagsFromGraph,
+      filters: Object.fromEntries(filtersDictAsArrays),
+      tags: Object.fromEntries(tagsDictAsArrays),
 
       references,
 
@@ -383,11 +506,11 @@ class Template {
 
       // stats
 
-      nblinks: graph.data.links.length,
+      nblinks: graph.size,
 
       date: new Date().toLocaleDateString(lang, {
         year: 'numeric',
-        month: 'long',
+        month: 'numeric',
         day: 'numeric',
         hour: 'numeric',
         minute: 'numeric',
@@ -395,11 +518,11 @@ class Template {
       }),
 
       sorting: {
-        records: graph.records.map(({ title }) => ({
+        records: records.map(({ title }) => ({
           alphabetical: recordsListAlphabetical.indexOf(title),
           chronological: recordsListChronological.indexOf(title),
         })),
-        tags: tagsFromGraph.map(({ name }) => ({
+        tags: tagsDictAsArrays.map(([name]) => ({
           alphabetical: tagsListAlphabetical.indexOf(name),
           digital: tagsListIncreasing.indexOf(name),
         })),
