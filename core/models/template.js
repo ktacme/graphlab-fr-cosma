@@ -6,10 +6,8 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import Graph from './graph.js';
 import Record from './record.js';
 import Config from './config.js';
-import Link from './link.js';
 import Bibliography from './bibliography.js';
 import nunjucks from 'nunjucks';
 import mdIt from 'markdown-it';
@@ -254,7 +252,7 @@ class Template {
     });
     templateEngine.addFilter('convertLinks', (input, opts, idToHighlight) => {
       // Replace wikilinks: "[[g:1234567890|toto]]" to "<a>toto</a>"
-      input = input.replace(Link.regexWikilink, (match, _, type, targetId, __, text) => {
+      input = input.replace(Record.regexWikilink, (match, _, type, targetId, __, text) => {
         const record = records.find(({ id }) => id === targetId.toLowerCase());
 
         if (!record) return match;
