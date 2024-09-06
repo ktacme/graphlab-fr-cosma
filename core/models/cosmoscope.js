@@ -251,8 +251,6 @@ class Cosmoscope {
         tags,
         metas,
         file.content,
-        [], // linksReferences
-        [], // backlinksReferences
         begin,
         end,
         bibliographicRecords,
@@ -320,8 +318,6 @@ class Cosmoscope {
           undefined,
           undefined,
           content,
-          [], // linksReferences
-          [], // backlinksReferences
           undefined,
           undefined,
           undefined,
