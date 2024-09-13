@@ -216,7 +216,7 @@ class Template {
       for (const record of records) {
         record.setBibliography(bibliography);
 
-        record.bibliographicRecords.forEach(({ target }) =>
+        record.bibliographicLinks.forEach(({ target }) =>
           references.push(bibliography.library[target]),
         );
       }
@@ -375,7 +375,7 @@ class Template {
       canSaveRecords: this.config.canSaveRecords(),
 
       hideIdFromRecordHeader,
-      records: records.map(({ thumbnail, wikilinks, bibliographicRecords, ...rest }) => {
+      records: records.map(({ thumbnail, wikilinks, bibliographicLinks, ...rest }) => {
         const backNodes = graph.inNeighbors(rest.id);
 
         const _links = wikilinks.map(({ contexts, type, ...rest }) => {
@@ -392,7 +392,7 @@ class Template {
           };
         });
 
-        bibliographicRecords.forEach(({ target, contexts }) => {
+        bibliographicLinks.forEach(({ target, contexts }) => {
           const recordTarget = recordDict.get(target);
 
           if (!recordTarget) {
@@ -431,7 +431,7 @@ class Template {
               });
             });
 
-          record.bibliographicRecords
+          record.bibliographicLinks
             .filter(({ target }) => {
               return target === rest.id;
             })

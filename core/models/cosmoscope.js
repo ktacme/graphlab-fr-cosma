@@ -239,9 +239,9 @@ class Cosmoscope {
       let { id, title, types, tags, thumbnail, references, begin, end, ...metas } = file.metas;
       id = id || file.metas['title'].toLowerCase();
 
-      const bibliographicRecords = [
-        ...Bibliography.getBibliographicRecordsFromText(file.content),
-        ...Bibliography.getBibliographicRecordsFromList(file.metas.references),
+      const bibliographicLinks = [
+        ...Bibliography.getBibliographicLinksFromText(file.content),
+        ...Bibliography.getBibliographicLinksFromList(file.metas.references),
       ];
 
       const record = new Record(
@@ -253,11 +253,10 @@ class Cosmoscope {
         file.content,
         begin,
         end,
-        bibliographicRecords,
+        bibliographicLinks,
         thumbnail,
         opts,
       );
-      record.setWikiLinksFromContent();
 
       return record;
     });
@@ -277,8 +276,8 @@ class Cosmoscope {
 
     let referenceRecords = new Map([]);
 
-    records.forEach(({ id: recordId, bibliographicRecords }) => {
-      bibliographicRecords.forEach(({ target, contexts }) => {
+    records.forEach(({ id: recordId, bibliographicLinks }) => {
+      bibliographicLinks.forEach(({ target, contexts }) => {
         if (!bibliography.library[target]) return;
 
         if (referenceRecords.has(target)) {

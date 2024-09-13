@@ -33,7 +33,7 @@ class Bibliography {
    * @returns {BibliographicRecord[]}
    */
 
-  static getBibliographicRecordsFromText(recordContent) {
+  static getBibliographicLinksFromText(recordContent) {
     /** @type {BibliographicRecord[]} */
     let quotes = [];
 
@@ -123,7 +123,7 @@ class Bibliography {
    * @returns {BibliographicRecord[]}
    */
 
-  static getBibliographicRecordsFromList(quotesId = []) {
+  static getBibliographicLinksFromList(quotesId = []) {
     return quotesId.map((quoteId, index) => {
       return {
         contexts: [],
