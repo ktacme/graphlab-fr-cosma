@@ -234,7 +234,7 @@ class Cosmoscope {
    * @returns {Record[]}
    */
 
-  static _getRecordsFromFiles(files, opts = {}) {
+  static getRecordsFromFiles(files, opts = {}) {
     return files.map((file) => {
       let { id, title, types, tags, thumbnail, references, begin, end, ...metas } = file.metas;
       id = id || file.metas['title'].toLowerCase();

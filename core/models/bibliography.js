@@ -106,8 +106,6 @@ class Bibliography {
       return quote;
     });
 
-    // return quotes;
-
     return Object.values(links).map(({ target, contexts }) => {
       return {
         contexts: Array.from(contexts),
