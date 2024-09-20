@@ -11,13 +11,10 @@ import * as Citr from '@zettlr/citr';
 /**
  * @typedef BibliographicRecord
  * @type {object}
- * @property {object} quotesExtract
- * @property {Citation[]} quotesExtract.citationItems
- * @property {object} quotesExtract.properties
- * @property {number} quotesExtract.properties.noteIndex
- * @property {string} text Quote string from plain text
- * @property {string[]} contexts Paragraph contains quote
- * @property {Set} ids All quote ids from quotesExtract.citationItems
+ * @property {string} type
+ * @property {string} target
+ * @property {string} text
+ * @property {string[]} contexts
  */
 
 /**
@@ -36,9 +33,11 @@ class Bibliography {
    * @returns {BibliographicRecord[]}
    */
 
-  static getBibliographicRecordsFromText(recordContent) {
+  static getBibliographicLinksFromText(recordContent) {
     /** @type {BibliographicRecord[]} */
     let quotes = [];
+
+    let links = {};
 
     Citr.util.extractCitations(recordContent).forEach((quoteText, index) => {
       let citationItems;
@@ -47,6 +46,18 @@ class Bibliography {
       } catch (error) {
         citationItems = [];
       }
+
+      citationItems.forEach(({ id }) => {
+        if (links[id]) {
+        } else {
+          links[id] = {
+            type: 'undefined',
+            target: id,
+            text: undefined,
+            contexts: new Set(),
+          };
+        }
+      });
 
       quotes.push({
         quotesExtract: {
@@ -65,6 +76,21 @@ class Bibliography {
 
     for (const paraph of paraphs) {
       Citr.util.extractCitations(paraph).forEach((quoteText) => {
+        let citationItems;
+        try {
+          citationItems = Citr.parseSingle(quoteText);
+        } catch (error) {
+          citationItems = [];
+        }
+
+        citationItems.forEach(({ id }) => {
+          if (links[id]) {
+            links[id].contexts.add(paraph);
+          } else {
+            throw new Error('Unknown quote on paraphs');
+          }
+        });
+
         if (contexts.has(quoteText)) {
           contexts.get(quoteText).add(paraph);
         } else {
@@ -80,7 +106,14 @@ class Bibliography {
       return quote;
     });
 
-    return quotes;
+    return Object.values(links).map(({ target, contexts }) => {
+      return {
+        contexts: Array.from(contexts),
+        target: target,
+        text: undefined,
+        type: 'undefined',
+      };
+    });
   }
 
   /**
@@ -88,25 +121,13 @@ class Bibliography {
    * @returns {BibliographicRecord[]}
    */
 
-  static getBibliographicRecordsFromList(quotesId = []) {
+  static getBibliographicLinksFromList(quotesId = []) {
     return quotesId.map((quoteId, index) => {
       return {
-        quotesExtract: {
-          citationItems: [
-            {
-              prefix: '',
-              suffix: '',
-              id: quoteId,
-              label: 'page',
-              locator: '',
-              'suppress-author': false,
-            },
-          ],
-          properties: { noteIndex: index + 1 },
-        },
-        text: '',
         contexts: [],
-        ids: new Set([quoteId]),
+        target: quoteId,
+        text: undefined,
+        type: 'undefined',
       };
     });
   }
