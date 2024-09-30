@@ -123,8 +123,7 @@ function parseSuffix(suffix, containsLocator) {
 }
 
 /**
- * 
- * @param {string} markdown 
+ * @param {string} markdown
  * @returns {CitePosition[]}
  */
 
